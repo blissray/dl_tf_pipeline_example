@@ -87,6 +87,13 @@ pp = pprint.PrettyPrinter()
 
 flags = tf.app.flags
 flags.DEFINE_string("image_dir", "Images", "The directory of dog images [Images]")
+flags.DEFINE_string("output_dir", "tfrecords", "The directory of tfrecord_output [tfrecords]")
+flags.DEFINE_boolean("cropping", "False", "The boolean vairable of dog faces cropping [False]")
+flags.DEFINE_integer("image_height", "350", "The boolean vairable of dog faces cropping [350]")
+flags.DEFINE_integer("image_width", "350", "The boolean vairable of dog faces cropping [350]")
+flags.DEFINE_boolean("image_adjusted", "False", "The boolean vairable expressing whether or not to reduce the image without distorting the image according to the face size of the dog [False]")
+flags.DEFINE_boolean("image_augumentation", "False", "The boolean vairable of generating image data added with random distortion, upside-downside, side-to-side reversal, etc. [False]")
+flags.DEFINE_float("test_ratio", "0.8", "The ratio of test image data set [0.8]")
 FLAGS = flags.FLAGS
 
 def get_total_data():
@@ -115,6 +122,13 @@ def get_total_data():
         total_data = np.array(total_data)
     return total_data
 
+def get_splitted_data(total_data):
+    from sklearn.model_selection import train_test_split
+    X_train, X_test, y_train, y_test = train_test_split(
+         total_data[:,0], total_data[:,1], test_size=FLAGS.test_ratio, random_state=42)
+    return X_train, X_test, y_train, y_test
+
+
 def main(_):
     print ('Converting JPEG to tfrecord datatype')
     print ('Argument setup')
@@ -125,6 +139,20 @@ def main(_):
     number_of_data_types = len(np.unique(total_data[:, 1]))
     print("The number of data : {0}".format(total_data.shape[0],))
     print("The number of bleeds : {0}".format(number_of_data_types,))
+
+    print('---------------------------------')
+    X_train, X_test, y_train, y_test = get_splitted_data(total_data)
+    print("Train / Test ratio : {0:.2f} / {1:.2f}".format( 1-FLAGS.test_ratio, FLAGS.test_ratio ))
+    print("Number of train data set : {0}".format(len(X_train)))
+    print("Number of test data set : {0}".format(len(X_test)))
+
+    #TODO - Google Detection API 써서 실험 먼저 해보기
+    #TODO - Test에도 공동적용해야할 내용 ==> data resize + adjustable
+    #TODO - 데이터 리사이즈 ==> adjustable에 맞춰 처리함
+    #TODO - cropping 여부 확인 ==> traing 데이터만 처리,
+    #TODO - 일단 테스트 데이터 먼저 리사이즈 처리?
+    #TODO - Training 데이터의 data augumentation을 어떻게 할 것인가?
+
 
 if __name__ =="__main__":
     tf.app.run()
