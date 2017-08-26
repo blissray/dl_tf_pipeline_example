@@ -6,94 +6,19 @@ import pprint
 pp = pprint.PrettyPrinter()
 
 
-# IMAGE_DIR = "Images"
-# ANNOTATION_DIR = "Annotation"
-#
-# def build_input(dataset, data_path, batch_size, mode):
-#
-# bleeds = os.listdir(ANNOTATION_DIR)
-# image_set = {}
-# annotation_set = {}
-# for bleed in bleeds:
-#     image_dir = os.path.join(IMAGE_DIR, bleed)
-#     annotation_dir = os.path.join(ANNOTATION_DIR, bleed)
-#     image_set[bleed] = os.listdir(image_dir)
-#     annotation_set[bleed] = os.listdir(annotation_dir)
-#
-#     total_data = []
-#     for bleed in image_set.keys():
-#         total_data.extend([ [filename,bleed] for filename in image_set[bleed]])
-#     total_data = np.array(total_data)
-#
-#
-# from sklearn.model_selection import train_test_split
-# X_train, X_test, y_train, y_test = train_test_split(
-#      total_data[:,0], total_data[:,1], test_size=0.2, random_state=42)
-#
-# sess = tf.Session()
-#
-# x_data = X_train
-# y_data = y_train
-# current_index = 0
-#
-#
-# record_location = "./output/images"
-#
-# writer = None
-# current_index = 0
-#
-#
-# for images_filename,breed in zip(x_data,y_data):
-#
-#     if current_index % 100 == 0:
-#
-#         if writer:
-#             writer.close()
-#         record_filename = "{record_location}-{current_index}.tfrecords".format(
-#             record_location=record_location, current_index=current_index
-#         )
-#
-#         writer = tf.python_io.TFRecordWriter(record_filename)
-#         file_full_path = os.path.join(IMAGE_DIR, breed,  images_filename)
-#
-#         image_file = tf.read_file(file_full_path)
-#         try:
-#             image = tf.image.decode_jpeg(image_file)
-#         except:
-#             print("Error : ", images_filename)
-#             continue
-#
-#
-#         grayscale_image = tf.image.rgb_to_grayscale(image)
-#         resized_image = tf.image.resize_images(grayscale_image, [250, 151])
-#
-#         image_bytes = sess.run(tf.cast(resized_image, tf.uint8)).tobytes()
-#         image_label = breed.encode("utf-8")
-#
-#         example = tf.train.Example(features = tf.train.Features(
-#                                     feature={'label':
-#                                               tf.train.Feature(bytes_list=tf.train.BytesList(
-#                                                   value=[image_label])),
-#                                               "images":
-#                                               tf.train.Feature(bytes_list=tf.train.BytesList(
-#                                                   value=[image_bytes]))
-#                                              }
-#                                   ))
-#         writer.write(example.SerializeToString())
-#     current_index += 1
-#     writer.close()
-# print("Done")
-#
+TRAIN  = "train"
+TEST  = "test"
 
 flags = tf.app.flags
 flags.DEFINE_string("image_dir", "Images", "The directory of dog images [Images]")
 flags.DEFINE_string("output_dir", "tfrecords", "The directory of tfrecord_output [tfrecords]")
 flags.DEFINE_boolean("cropping", "False", "The boolean vairable of dog faces cropping [False]")
-flags.DEFINE_integer("image_height", "350", "The boolean vairable of dog faces cropping [350]")
-flags.DEFINE_integer("image_width", "350", "The boolean vairable of dog faces cropping [350]")
+flags.DEFINE_integer("image_height", "256", "The boolean vairable of dog faces cropping [350]")
+flags.DEFINE_integer("image_width", "256", "The boolean vairable of dog faces cropping [350]")
 flags.DEFINE_boolean("image_adjusted", "False", "The boolean vairable expressing whether or not to reduce the image without distorting the image according to the face size of the dog [False]")
 flags.DEFINE_boolean("image_augumentation", "False", "The boolean vairable of generating image data added with random distortion, upside-downside, side-to-side reversal, etc. [False]")
-flags.DEFINE_float("test_ratio", "0.8", "The ratio of test image data set [0.8]")
+flags.DEFINE_float("test_ratio", "0.2", "The ratio of test image data set [0.8]")
+
 FLAGS = flags.FLAGS
 
 def get_total_data():
@@ -123,11 +48,87 @@ def get_total_data():
     return total_data
 
 def get_splitted_data(total_data):
+    """
+    Returns:
+    """
+
     from sklearn.model_selection import train_test_split
     X_train, X_test, y_train, y_test = train_test_split(
-         total_data[:,0], total_data[:,1], test_size=FLAGS.test_ratio, random_state=42)
+         total_data[:,0], total_data[:,1], test_size=FLAGS.test_ratio, random_state=1)
     return X_train, X_test, y_train, y_test
 
+def generate_patches():
+    with open('testfile.txt', 'r') as f:
+        for patch in f.readlines():
+            yield patch[:-1]
+
+def persistence_image_data_to_tfrecords(x_data, y_data, data_type, split_index=256):
+    """
+    Returns:
+    """
+
+    OUTPUT_DIR = os.path.join(FLAGS.output_dir,data_type)
+    IMAGE_DIR = FLAGS.image_dir
+
+    if not(os.path.exists(FLAGS.output_dir)):
+        os.mkdir(FLAGS.output_dir)
+
+    if not(os.path.exists(OUTPUT_DIR)):
+        os.mkdir(OUTPUT_DIR)
+        print("Directory create : {0}".format(OUTPUT_DIR,))
+
+    writer = None
+    sess = None
+    current_index = 0
+
+
+
+    for images_filename,breed in zip(x_data,y_data):
+        if not(images_filename[-3:] == "jpg"):
+            print("Error - ", images_filename)
+            continue
+        if current_index % split_index == 0:
+            if writer:
+                writer.close()
+            if sess:
+                sess.close()
+            tf.reset_default_graph()
+            graph = tf.get_default_graph()
+            sess = tf.Session(graph=graph)
+            sess.run(tf.global_variables_initializer())
+
+            record_filename = "{output_dir}/{data_type}-{current_index}.tfrecords".format(
+                output_dir=OUTPUT_DIR, data_type=data_type, current_index=current_index
+            )
+            writer = tf.python_io.TFRecordWriter(record_filename)
+
+        file_full_path = os.path.join(IMAGE_DIR, breed,  images_filename)
+        image_file = tf.read_file(file_full_path)
+        try:
+            image = tf.image.decode_jpeg(image_file)
+        except:
+            print("Error : ", images_filename)
+            continue
+
+
+        grayscale_image = tf.image.rgb_to_grayscale(image)
+        resized_image = tf.image.resize_images(grayscale_image, [FLAGS.image_width, FLAGS.image_height])
+
+        image_bytes = sess.run(tf.cast(resized_image, tf.uint8)).tobytes()
+        image_label = breed.encode("utf-8")
+
+        example = tf.train.Example(features = tf.train.Features(
+                                    feature={'label':
+                                              tf.train.Feature(bytes_list=tf.train.BytesList(
+                                                  value=[image_label])),
+                                              "images":
+                                              tf.train.Feature(bytes_list=tf.train.BytesList(
+                                                  value=[image_bytes]))
+                                             }
+                                  ))
+        writer.write(example.SerializeToString())
+        current_index += 1
+    writer.close()
 
 def main(_):
     print ('Converting JPEG to tfrecord datatype')
@@ -145,6 +146,11 @@ def main(_):
     print("Train / Test ratio : {0:.2f} / {1:.2f}".format( 1-FLAGS.test_ratio, FLAGS.test_ratio ))
     print("Number of train data set : {0}".format(len(X_train)))
     print("Number of test data set : {0}".format(len(X_test)))
+
+
+    print('---------------------------------')
+    persistence_image_data_to_tfrecords(X_train, y_train, data_type=TRAIN)
+    persistence_image_data_to_tfrecords(X_test, y_test, data_type=TEST)
 
     #TODO - Google Detection API 써서 실험 먼저 해보기
     #TODO - Test에도 공동적용해야할 내용 ==> data resize + adjustable
