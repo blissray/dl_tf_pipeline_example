@@ -105,8 +105,10 @@ def persistence_image_data_to_tfrecords(x_data, y_data, data_type, split_index=2
         file_full_path = os.path.join(IMAGE_DIR, breed,  images_filename)
         image_file = tf.read_file(file_full_path)
         try:
+            print(file_full_path)
             image = tf.image.decode_jpeg(image_file)
-        except:
+        except InvalidArgumentError as e:
+            print(e)
             print("Error : ", images_filename)
             continue
 
