@@ -62,7 +62,8 @@ def generate_patches():
         for patch in f.readlines():
             yield patch[:-1]
 
-def persistence_image_data_to_tfrecords(x_data, y_data, data_type, split_index=256):
+def persistence_image_data_to_tfrecords(x_data, y_data, data_type,
+        split_index=128):
     """
     Returns:
     """
@@ -81,7 +82,10 @@ def persistence_image_data_to_tfrecords(x_data, y_data, data_type, split_index=2
     sess = None
     current_index = 0
 
-
+    from sklearn import preprocessing
+    le = preprocessing.LabelEncoder()
+    le.fit(y_data)
+    y_data_size = len(le.classes_)
 
     for images_filename,breed in zip(x_data,y_data):
         if not(images_filename[-3:] == "jpg"):
@@ -100,12 +104,13 @@ def persistence_image_data_to_tfrecords(x_data, y_data, data_type, split_index=2
             record_filename = "{output_dir}/{data_type}-{current_index}.tfrecords".format(
                 output_dir=OUTPUT_DIR, data_type=data_type, current_index=current_index
             )
+            print(record_filename)
             writer = tf.python_io.TFRecordWriter(record_filename)
 
         file_full_path = os.path.join(IMAGE_DIR, breed,  images_filename)
         image_file = tf.read_file(file_full_path)
         try:
-            print(file_full_path)
+            # print(file_full_path)
             image = tf.image.decode_jpeg(image_file)
         except InvalidArgumentError as e:
             print(e)
@@ -117,7 +122,11 @@ def persistence_image_data_to_tfrecords(x_data, y_data, data_type, split_index=2
         resized_image = tf.image.resize_images(grayscale_image, [FLAGS.image_width, FLAGS.image_height])
 
         image_bytes = sess.run(tf.cast(resized_image, tf.uint8)).tobytes()
-        image_label = breed.encode("utf-8")
+        y_data_label = le.transform([breed])
+
+
+        lbl_one_hot = tf.one_hot(y_data_label[0], y_data_size, 1.0, 0.0)
+        image_label = sess.run(tf.cast(lbl_one_hot, tf.uint8)).tobytes()
 
         example = tf.train.Example(features = tf.train.Features(
                                     feature={'label':
