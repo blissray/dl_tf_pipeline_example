@@ -17,7 +17,9 @@ from __future__ import print_function
 import tensorflow as tf
 
 # import models.cnn.SimpleAlexNet
-from models.mlp import SimpleModel
+# from models.mlp import SimpleModel
+# from models.cnn import SimpleLeNet
+from models.vgg import SimpleVGGNet
 
 flags = tf.app.flags
 flags.DEFINE_string("model", "mlp.SimpleModel", "The directory of dog images [Images]")
@@ -37,12 +39,12 @@ def read_file_format(filename_queue):
     record_image = tf.decode_raw(features['images'], tf.uint8)
     record_label = tf.decode_raw(features['label'], tf.uint8)
 
-    image = tf.reshape(record_image, [256, 256, 1])
+    image = tf.reshape(record_image, [100, 100, 1])
     label = tf.reshape(record_label, [120])
     return image, label
 
-def input_pipeline(filenames, batch_size=128, num_epochs=None,
-        min_after_dequeue=512):
+def input_pipeline(filenames, batch_size=128, num_epochs=100,
+        min_after_dequeue=64):
     filename_queue = tf.train.string_input_producer(
         filenames, num_epochs=num_epochs, shuffle=True)
     image, label = read_file_format(filename_queue)
@@ -61,7 +63,7 @@ def input_pipeline(filenames, batch_size=128, num_epochs=None,
     return  image_batch, label_batch
 
 def train(image_batch, label_batch):
-    net = SimpleModel()
+    net = SimpleVGGNet()
     with tf.Session() as sess:
         init_op = tf.group(
             tf.global_variables_initializer(),
@@ -77,18 +79,19 @@ def train(image_batch, label_batch):
             while not coord.should_stop():
                 # Run training steps or whatever
 
-                _, c = sess.run([net.optimizer, net.cost], feed_dict={
+                _, c = sess.run([net.train_op, net.cost], feed_dict={
                    net.image_batch:sess.run(image_batch),
                    net.label_batch:sess.run(label_batch),
-                   net.test: False
+                   net.is_training:True
                    })
 
+                print("Total cost :", c/128)
                 counter += 1
-                if counter % 100 == 0:
+                if counter % 5 == 0:
                     _,pred = sess.run([net.cost, net.pred], feed_dict={
                        net.image_batch:sess.run(image_batch),
                        net.label_batch:sess.run(label_batch),
-                       net.test: True
+                       net.is_training:False
                        })
                     correct_prediction = sess.run(tf.equal(
                         tf.argmax(pred, 1),
@@ -108,8 +111,9 @@ def train(image_batch, label_batch):
 def main(_):
     import os
     filenames = []
-    for file_name in os.listdir("./tfrecords/train/"):
-        filenames.append(os.path.join("./tfrecords/train/",file_name))
+    TFRECORDS_DIR = "./tfrecords/cropping/train/"
+    for file_name in os.listdir(TFRECORDS_DIR):
+        filenames.append(os.path.join(TFRECORDS_DIR,file_name))
 
     image_batch, label_batch = input_pipeline(filenames, num_epochs=10000)
     train(image_batch, label_batch)

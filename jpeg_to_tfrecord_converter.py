@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import tensorflow as tf
+import image_preprocessing_util as iputil
 
 import pprint
 pp = pprint.PrettyPrinter()
@@ -12,9 +13,9 @@ TEST  = "test"
 flags = tf.app.flags
 flags.DEFINE_string("image_dir", "Images", "The directory of dog images [Images]")
 flags.DEFINE_string("output_dir", "tfrecords", "The directory of tfrecord_output [tfrecords]")
-flags.DEFINE_boolean("cropping", "False", "The boolean vairable of dog faces cropping [False]")
-flags.DEFINE_integer("image_height", "256", "The boolean vairable of dog faces cropping [350]")
-flags.DEFINE_integer("image_width", "256", "The boolean vairable of dog faces cropping [350]")
+flags.DEFINE_boolean("cropping", "True", "The boolean vairable of dog faces cropping [True]")
+flags.DEFINE_integer("image_height", "100", "The boolean vairable of dog faces cropping [100]")
+flags.DEFINE_integer("image_width", "100", "The boolean vairable of dog faces cropping [100]")
 flags.DEFINE_boolean("image_adjusted", "False", "The boolean vairable expressing whether or not to reduce the image without distorting the image according to the face size of the dog [False]")
 flags.DEFINE_boolean("image_augumentation", "False", "The boolean vairable of generating image data added with random distortion, upside-downside, side-to-side reversal, etc. [False]")
 flags.DEFINE_float("test_ratio", "0.2", "The ratio of test image data set [0.8]")
@@ -47,6 +48,18 @@ def get_total_data():
         total_data = np.array(total_data)
     return total_data
 
+def _get_target_dir():
+    if FLAGS.image_augumentation:
+        TAGET_DIR = "augumentation"
+    elif FLAGS.image_adjusted:
+        TAGET_DIR = "adjusted"
+    elif FLAGS.cropping:
+        TAGET_DIR = "cropping"
+    else:
+        TAGET_DIR = "general"
+
+    return TAGET_DIR
+
 def get_splitted_data(total_data):
     """
     Returns:
@@ -68,14 +81,12 @@ def persistence_image_data_to_tfrecords(x_data, y_data, data_type,
     Returns:
     """
 
-    OUTPUT_DIR = os.path.join(FLAGS.output_dir,data_type)
+    TAGET_DIR = _get_target_dir()
+    OUTPUT_DIR = os.path.join(FLAGS.output_dir,TAGET_DIR,data_type)
     IMAGE_DIR = FLAGS.image_dir
 
-    if not(os.path.exists(FLAGS.output_dir)):
-        os.mkdir(FLAGS.output_dir)
-
     if not(os.path.exists(OUTPUT_DIR)):
-        os.mkdir(OUTPUT_DIR)
+        os.makedirs(OUTPUT_DIR)
         print("Directory create : {0}".format(OUTPUT_DIR,))
 
     writer = None
@@ -104,7 +115,8 @@ def persistence_image_data_to_tfrecords(x_data, y_data, data_type,
             record_filename = "{output_dir}/{data_type}-{current_index}.tfrecords".format(
                 output_dir=OUTPUT_DIR, data_type=data_type, current_index=current_index
             )
-            print(record_filename)
+            print("=============>" , record_filename)
+            print("current index : {0}".format(current_index,))
             writer = tf.python_io.TFRecordWriter(record_filename)
 
         file_full_path = os.path.join(IMAGE_DIR, breed,  images_filename)
@@ -117,28 +129,41 @@ def persistence_image_data_to_tfrecords(x_data, y_data, data_type,
             print("Error : ", images_filename)
             continue
 
+        image_list = [image]
+        if FLAGS.cropping:
+            image_list = []
+            size_info = iputil.get_orginal_size_info(breed, images_filename)
+            target_image = tf.image.resize_images(
+                image, [size_info["width"], size_info["height"]])
+            bounding_info = iputil.get_bounding_size_info(breed, images_filename)
+            for box in bounding_info:
+                image = tf.image.crop_to_bounding_box(
+                    target_image,
+                    box[0],box[1],box[2],box[3])
+                image_list.append(image)
 
-        grayscale_image = tf.image.rgb_to_grayscale(image)
-        resized_image = tf.image.resize_images(grayscale_image, [FLAGS.image_width, FLAGS.image_height])
+        for image in image_list:
+            grayscale_image = tf.image.rgb_to_grayscale(image)
+            resized_image = tf.image.resize_images(
+                grayscale_image, [FLAGS.image_width, FLAGS.image_height])
 
-        image_bytes = sess.run(tf.cast(resized_image, tf.uint8)).tobytes()
-        y_data_label = le.transform([breed])
+            image_bytes = sess.run(tf.cast(resized_image, tf.uint8)).tobytes()
+            y_data_label = le.transform([breed])
 
+            lbl_one_hot = tf.one_hot(y_data_label[0], y_data_size, 1.0, 0.0)
+            image_label = sess.run(tf.cast(lbl_one_hot, tf.uint8)).tobytes()
 
-        lbl_one_hot = tf.one_hot(y_data_label[0], y_data_size, 1.0, 0.0)
-        image_label = sess.run(tf.cast(lbl_one_hot, tf.uint8)).tobytes()
-
-        example = tf.train.Example(features = tf.train.Features(
-                                    feature={'label':
-                                              tf.train.Feature(bytes_list=tf.train.BytesList(
-                                                  value=[image_label])),
-                                              "images":
-                                              tf.train.Feature(bytes_list=tf.train.BytesList(
-                                                  value=[image_bytes]))
-                                             }
-                                  ))
-        writer.write(example.SerializeToString())
-        current_index += 1
+            example = tf.train.Example(features = tf.train.Features(
+                                        feature={'label':
+                                                  tf.train.Feature(bytes_list=tf.train.BytesList(
+                                                      value=[image_label])),
+                                                  "images":
+                                                  tf.train.Feature(bytes_list=tf.train.BytesList(
+                                                      value=[image_bytes]))
+                                                 }
+                                      ))
+            writer.write(example.SerializeToString())
+            current_index += 1
     writer.close()
 
 def main(_):
@@ -166,9 +191,8 @@ def main(_):
     #TODO - Google Detection API 써서 실험 먼저 해보기
     #TODO - Test에도 공동적용해야할 내용 ==> data resize + adjustable
     #TODO - 데이터 리사이즈 ==> adjustable에 맞춰 처리함
-    #TODO - cropping 여부 확인 ==> traing 데이터만 처리,
-    #TODO - 일단 테스트 데이터 먼저 리사이즈 처리?
     #TODO - Training 데이터의 data augumentation을 어떻게 할 것인가?
+    #TODO - config.py 파일을 따로 만들던가, 따로 config 정보를 저장하는 공간을 만들자
 
 
 if __name__ =="__main__":
