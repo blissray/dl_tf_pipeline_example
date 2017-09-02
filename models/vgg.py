@@ -3,13 +3,13 @@ slim = tf.contrib.slim
 
 class SimpleVGGNet(object):
     def __init__(self):
-        self.n_input = 100*100
+        self.n_input = 128*128*3
         self.n_classes = 120
         self.learning_rate = 0.001
         self.optimizer = None
         dropout_keep_prob = 0.5
 
-        self.image_batch = tf.placeholder(tf.float32, shape=[None, 100,100,1])
+        self.image_batch = tf.placeholder(tf.float32, shape=[None, 128,128,3])
         self.label_batch = tf.placeholder(tf.float32, shape=[None, self.n_classes])
         self.is_training = tf.placeholder(tf.bool)
 

@@ -6,6 +6,8 @@ import image_preprocessing_util as iputil
 import pprint
 pp = pprint.PrettyPrinter()
 
+from scipy.misc import imsave
+
 
 TRAIN  = "train"
 TEST  = "test"
@@ -14,8 +16,8 @@ flags = tf.app.flags
 flags.DEFINE_string("image_dir", "Images", "The directory of dog images [Images]")
 flags.DEFINE_string("output_dir", "tfrecords", "The directory of tfrecord_output [tfrecords]")
 flags.DEFINE_boolean("cropping", "True", "The boolean vairable of dog faces cropping [True]")
-flags.DEFINE_integer("image_height", "100", "The boolean vairable of dog faces cropping [100]")
-flags.DEFINE_integer("image_width", "100", "The boolean vairable of dog faces cropping [100]")
+flags.DEFINE_integer("image_height", "128", "The boolean vairable of dog faces cropping [128]")
+flags.DEFINE_integer("image_width", "128", "The boolean vairable of dog faces cropping [128]")
 flags.DEFINE_boolean("image_adjusted", "False", "The boolean vairable expressing whether or not to reduce the image without distorting the image according to the face size of the dog [False]")
 flags.DEFINE_boolean("image_augumentation", "False", "The boolean vairable of generating image data added with random distortion, upside-downside, side-to-side reversal, etc. [False]")
 flags.DEFINE_float("test_ratio", "0.2", "The ratio of test image data set [0.8]")
@@ -143,7 +145,8 @@ def persistence_image_data_to_tfrecords(x_data, y_data, data_type,
                 image_list.append(image)
 
         for image in image_list:
-            grayscale_image = tf.image.rgb_to_grayscale(image)
+            # grayscale_image = tf.image.rgb_to_grayscale(image)
+            grayscale_image = image
             resized_image = tf.image.resize_images(
                 grayscale_image, [FLAGS.image_width, FLAGS.image_height])
 
@@ -152,6 +155,11 @@ def persistence_image_data_to_tfrecords(x_data, y_data, data_type,
 
             lbl_one_hot = tf.one_hot(y_data_label[0], y_data_size, 1.0, 0.0)
             image_label = sess.run(tf.cast(lbl_one_hot, tf.uint8)).tobytes()
+
+
+            imsave("./resized_image/" +images_filename+"_"+ str(current_index) +".jpeg", sess.run(resized_image))
+
+
 
             example = tf.train.Example(features = tf.train.Features(
                                         feature={'label':

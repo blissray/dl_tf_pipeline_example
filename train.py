@@ -17,8 +17,8 @@ from __future__ import print_function
 import tensorflow as tf
 
 # import models.cnn.SimpleAlexNet
-# from models.mlp import SimpleModel
-# from models.cnn import SimpleLeNet
+from models.mlp import SimpleModel
+from models.cnn import SimpleLeNet
 from models.vgg import SimpleVGGNet
 
 flags = tf.app.flags
@@ -39,12 +39,12 @@ def read_file_format(filename_queue):
     record_image = tf.decode_raw(features['images'], tf.uint8)
     record_label = tf.decode_raw(features['label'], tf.uint8)
 
-    image = tf.reshape(record_image, [100, 100, 1])
+    image = tf.reshape(record_image, [128,128, 3])
     label = tf.reshape(record_label, [120])
     return image, label
 
 def input_pipeline(filenames, batch_size=128, num_epochs=100,
-        min_after_dequeue=64):
+        min_after_dequeue=512):
     filename_queue = tf.train.string_input_producer(
         filenames, num_epochs=num_epochs, shuffle=True)
     image, label = read_file_format(filename_queue)
@@ -63,7 +63,7 @@ def input_pipeline(filenames, batch_size=128, num_epochs=100,
     return  image_batch, label_batch
 
 def train(image_batch, label_batch):
-    net = SimpleVGGNet()
+    net = SimpleLeNet()
     with tf.Session() as sess:
         init_op = tf.group(
             tf.global_variables_initializer(),
@@ -85,19 +85,22 @@ def train(image_batch, label_batch):
                    net.is_training:True
                    })
 
-                print("Total cost :", c/128)
+                print("Total cost :", c)
                 counter += 1
                 if counter % 5 == 0:
-                    _,pred = sess.run([net.cost, net.pred], feed_dict={
+                    label,cost, pred = sess.run([net.label_batch, net.cost, net.pred], feed_dict={
                        net.image_batch:sess.run(image_batch),
                        net.label_batch:sess.run(label_batch),
                        net.is_training:False
                        })
                     correct_prediction = sess.run(tf.equal(
                         tf.argmax(pred, 1),
-                        tf.argmax(sess.run(label_batch), 1)))
+                        tf.argmax(label, 1)))
                     accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-                    print("Total cost :", c/128)
+                    import numpy as np
+                    print("Total cost :", np.argmax(pred, axis=1))
+                    print("Total cost :", np.argmax(label, axis=1))
+                    print("Total cost :", cost)
                     print("Accuracy ",counter, " :", sess.run(accuracy))
 
         except tf.errors.OutOfRangeError as e:
